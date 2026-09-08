@@ -10,12 +10,16 @@
 
 ## 2. Modelagem — Diagrama Entidade-Relacionamento
 
-Decisão de modelagem: o enunciado exige que **atendentes também possam ser clientes**. Para não duplicar CPF, nome e e-mail em duas tabelas independentes, usei **especialização** (generalização/especialização): `pessoas` é a superclasse com os dados comuns, e `clientes`/`atendentes` são subclasses — cada uma tem sua chave primária compartilhada com `pessoas` (relacionamento 1:1 opcional). Uma pessoa pode ter registro só em `clientes`, só em `atendentes`, nos dois, ou em nenhum ainda.
+Decisão de modelagem: o enunciado exige que **atendentes também possam ser clientes**. Para não duplicar CPF, nome e e-mail em duas tabelas independentes, foi utilizada **especialização** (generalização/especialização): `pessoas` é a superclasse com os dados comuns, e `clientes`/`atendentes` são subclasses. Cada uma possui uma chave primária compartilhada com `pessoas`, representando um relacionamento 1:1 opcional.
+
+Uma pessoa pode ter registro somente em `clientes`, somente em `atendentes`, nos dois ou em nenhum dos dois.
 
 ```mermaid
 erDiagram
+
     PESSOAS ||--o| CLIENTES : "pode ser"
     PESSOAS ||--o| ATENDENTES : "pode ser"
+
     CLIENTES ||--o{ CONTRATOS : "contrata"
     ATENDENTES ||--o{ CONTRATOS : "atende"
     VEICULOS ||--o{ CONTRATOS : "é alugado em"
@@ -27,16 +31,19 @@ erDiagram
         varchar sobrenome
         varchar email UK
     }
+
     CLIENTES {
-        int id_cliente PK_FK
+        int id_cliente PK, FK
         varchar endereco
         varchar dados_bancarios
     }
+
     ATENDENTES {
-        int id_atendente PK_FK
+        int id_atendente PK, FK
         varchar matricula UK
         date data_admissao
     }
+
     VEICULOS {
         int id_veiculo PK
         varchar placa UK
@@ -46,6 +53,7 @@ erDiagram
         varchar status
         numeric valor_diaria
     }
+
     CONTRATOS {
         int id_contrato PK
         varchar numero_contrato UK
@@ -62,18 +70,18 @@ erDiagram
 
 ### Outras decisões de design
 
-| Decisão | Justificativa |
-|---|---|
-| `tipo` de veículo e `forma_pagamento` como `CHECK` em vez de tabela de domínio | São poucos valores, fixos e pouco prováveis de mudar — o `CHECK` já garante integridade sem exigir `JOIN` extra em toda consulta. |
-| `status` do veículo (`DISPONIVEL` / `ALUGADO` / `MANUTENCAO`) | Não estava explícito no enunciado, mas é necessário para o sistema saber quais veículos podem ser alugados — demonstrado nos scripts de `UPDATE`. |
-| `contratos.id_atendente` como `NOT NULL` | Assunção de negócio: todo contrato é fechado por um atendente da empresa. |
-| `ON DELETE CASCADE` de `clientes`/`atendentes` para `pessoas` | Se a pessoa é removida, os papéis dela deixam de existir junto. |
-| `ON DELETE RESTRICT` de `contratos` para `clientes`/`atendentes`/`veiculos` | Contrato é registro histórico: não pode "sumir" o cliente/veículo de um contrato existente. Validado no script `013`. |
-| `numero_contrato`, `cpf`, `email`, `placa`, `matricula` com `UNIQUE` | Chaves de negócio que não podem se repetir, além da chave primária técnica (`SERIAL`). |
+| Decisão                                                                        | Justificativa                                                                                                                                     |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tipo` de veículo e `forma_pagamento` como `CHECK` em vez de tabela de domínio | São poucos valores, fixos e pouco prováveis de mudar — o `CHECK` já garante integridade sem exigir `JOIN` extra em toda consulta.                 |
+| `status` do veículo (`DISPONIVEL` / `ALUGADO` / `MANUTENCAO`)                  | Não estava explícito no enunciado, mas é necessário para o sistema saber quais veículos podem ser alugados — demonstrado nos scripts de `UPDATE`. |
+| `contratos.id_atendente` como `NOT NULL`                                       | Assunção de negócio: todo contrato é fechado por um atendente da empresa.                                                                         |
+| `ON DELETE CASCADE` de `clientes`/`atendentes` para `pessoas`                  | Se a pessoa é removida, os papéis dela deixam de existir junto.                                                                                   |
+| `ON DELETE RESTRICT` de `contratos` para `clientes`/`atendentes`/`veiculos`    | Contrato é registro histórico: não pode desaparecer o cliente ou veículo de um contrato existente. Essa regra é validada no script `013`.         |
+| `numero_contrato`, `cpf`, `email`, `placa` e `matricula` com `UNIQUE`          | São chaves de negócio que não podem se repetir, além da chave primária técnica (`SERIAL`).                                                        |
 
 ## 3. Estrutura do repositório
 
-```
+```text
 .
 ├── README.md
 └── scripts/
@@ -93,26 +101,47 @@ erDiagram
     └── 014__create_view_pessoas_atendentes.sql
 ```
 
-Convenção de nomes: `[versão]__[ação]_[descrição/objeto].sql`. Todos os scripts foram testados em **PostgreSQL 16** e são seguros para rodar mais de uma vez (`CREATE TABLE IF NOT EXISTS`, `CREATE OR REPLACE VIEW` e `INSERT ... ON CONFLICT DO NOTHING`).
+Convenção de nomes: `[versão]__[ação]_[descrição/objeto].sql`.
+
+Os scripts de criação e inserção foram estruturados para permitir reexecução sem duplicação de objetos ou dados, utilizando recursos como `CREATE TABLE IF NOT EXISTS`, `CREATE OR REPLACE VIEW` e `INSERT ... ON CONFLICT DO NOTHING`.
 
 ## 4. Como executar
+
+### Pelo pgAdmin
+
+1. Crie ou selecione o banco de dados `aluguel_carros`.
+2. Abra o **Query Tool** do banco.
+3. Execute os scripts da pasta `scripts` na ordem numérica indicada.
+4. Após a execução, verifique as tabelas, os dados e a view criada.
+
+### Pelo terminal
 
 ```bash
 # 1) Criar o banco
 createdb aluguel_carros
 
-# 2) Rodar todos os scripts em ordem
+# 2) Rodar os scripts em ordem
 for f in scripts/*.sql; do
-  psql -d aluguel_carros -f "$f"
+    psql -d aluguel_carros -f "$f"
 done
 ```
 
-Ou, um a um, na ordem numérica indicada acima com `psql -d aluguel_carros -f scripts/001__create_table_pessoas.sql`, e assim por diante.
+Também é possível executar os arquivos individualmente:
+
+```bash
+psql -d aluguel_carros -f scripts/001__create_table_pessoas.sql
+```
+
+e seguir a ordem numérica dos demais scripts.
 
 ## 5. O que cada fase de scripts demonstra
 
-- **001–005 (DDL):** criação das 5 tabelas, com chaves primárias, estrangeiras, `UNIQUE`, `NOT NULL` e `CHECK`.
-- **006–010 (DML - INSERT):** carga de dados de exemplo cobrindo todos os relacionamentos, incluindo uma pessoa (Juliana Pereira) que é cliente **e** atendente ao mesmo tempo.
-- **011–012 (DML - UPDATE):** atualização automática do status do veículo quando o contrato vence, e alteração pontual da forma de pagamento de um contrato.
-- **013 (DML - DELETE):** exclusão simples de um registro de teste, e uma validação de que a restrição `ON DELETE RESTRICT` realmente impede excluir um cliente com contrato ativo.
-- **014 (extra):** view `vw_pessoas_papeis`, que lista cada pessoa indicando se ela é cliente, atendente, ou os dois.
+* **001–005 (DDL):** criação das 5 tabelas, com chaves primárias, estrangeiras, `UNIQUE`, `NOT NULL` e `CHECK`.
+
+* **006–010 (DML - INSERT):** carga de dados de exemplo cobrindo todos os relacionamentos, incluindo uma pessoa (Juliana Pereira) que é **cliente e atendente** ao mesmo tempo.
+
+* **011–012 (DML - UPDATE):** atualização do status do veículo após o vencimento do contrato e alteração pontual da forma de pagamento de um contrato.
+
+* **013 (DML - DELETE):** exclusão de um registro de teste e validação de que a restrição `ON DELETE RESTRICT` impede a exclusão de um cliente que possui contrato relacionado.
+
+* **014 (extra):** criação da view `vw_pessoas_papeis`, que lista cada pessoa indicando se ela é cliente, atendente ou ambos.
